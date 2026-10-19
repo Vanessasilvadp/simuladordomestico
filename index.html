@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de Custo Doméstico</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+/* Layout: ficha de cálculo à esquerda (entradas), mesa de resultados à direita com abas por módulo; relatório como folha A4 */
+:root{
+  --bg:#F5F4EE; --surface:#FFFFFF; --sunk:#ECEAE0; --line:#DCD9CB;
+  --ink:#161616; --muted:#5B605E; --teal:#01516A; --teal-soft:#D7E6EA;
+  --clay:#AD4402; --clay-soft:#F3E1D3; --good:#2F6B3A; --bar:#8FB3BD;
+  --f-display:"Sora", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Public Sans", "Segoe UI", system-ui, sans-serif;
+  --f-num:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1719; --surface:#162124; --sunk:#1C2A2E; --line:#2B3C40;
+  --ink:#ECEAE2; --muted:#A2ABA8; --teal:#62B4C9; --teal-soft:#1D3B44;
+  --clay:#E58447; --clay-soft:#3D2618; --good:#7CC48A; --bar:#3E6E7A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1719; --surface:#162124; --sunk:#1C2A2E; --line:#2B3C40;
+  --ink:#ECEAE2; --muted:#A2ABA8; --teal:#62B4C9; --teal-soft:#1D3B44;
+  --clay:#E58447; --clay-soft:#3D2618; --good:#7CC48A; --bar:#3E6E7A; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:2px solid var(--ink);margin-bottom:20px}
+.brand{display:flex;flex-direction:column;gap:2px}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:600}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3vw,30px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lede{color:var(--muted);margin:0;max-width:62ch}
+.stamp{font-family:var(--f-num);font-size:12px;color:var(--muted);border:1px solid var(--line);padding:4px 8px;border-radius:var(--r);background:var(--surface)}
+.grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:960px){.grid{grid-template-columns:minmax(0,1fr)}}
+aside.ficha{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:4px 16px 16px}
+fieldset{border:0;border-top:1px solid var(--line);margin:0;padding:14px 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+fieldset:first-of-type{border-top:0}
+legend{font-family:var(--f-display);font-weight:600;font-size:13px;padding:0;margin-bottom:2px;grid-column:1/-1;float:left;width:100%}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f.full{grid-column:1/-1}
+label{font-size:12px;color:var(--muted);font-weight:500}
+input,select{font:inherit;font-family:var(--f-num);font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
+input[type=text]{font-family:var(--f-body)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+.hint{font-size:11px;color:var(--muted);grid-column:1/-1;margin:-4px 0 2px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.tab{font:inherit;font-weight:600;font-size:13px;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:10px 12px;cursor:pointer;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--teal)}
+.tab:hover{color:var(--ink)}
+section.panel{display:flex;flex-direction:column;gap:18px;min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.kpi .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kpi .v{font-family:var(--f-num);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted)}
+.kpi.hl{border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.card h2{font-family:var(--f-display);font-size:15px;font-weight:600;margin:0 0 10px}
+.card h2 small{font-family:var(--f-body);font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;border-bottom:1.5px solid var(--ink)}
+td.n{font-family:var(--f-num);font-size:13px}
+tr.grp td{font-family:var(--f-display);font-weight:600;font-size:12px;color:var(--teal);padding-top:14px;border-bottom:0}
+tr.tot td{font-weight:600;background:var(--sunk)}
+tr.tot td.n{font-weight:500}
+tr.minus td{color:var(--muted)}
+.note{font-size:12.5px;color:var(--muted);max-width:75ch}
+.callout{display:flex;gap:10px;align-items:flex-start;border-left:3px solid var(--clay);background:var(--clay-soft);padding:10px 12px;border-radius:0 var(--r) var(--r) 0;font-size:13px}
+.callout.info{border-left-color:var(--teal);background:var(--teal-soft)}
+.row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-2px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button.b{font:inherit;font-weight:600;font-size:13px;border-radius:4px;padding:9px 14px;cursor:pointer;border:1px solid var(--teal);background:var(--teal);color:var(--surface)}
+button.b.ghost{background:transparent;color:var(--teal)}
+button.b:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:12px;color:var(--muted);min-height:18px}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--clay-soft);color:var(--clay)}
+.pill.t{background:var(--teal-soft);color:var(--teal)}
+/* Relatório: folha */
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:clamp(18px,4vw,40px);max-width:820px;width:100%;margin:0 auto;box-shadow:0 1px 0 var(--line),0 12px 24px -18px rgba(0,0,0,.35)}
+.sheet h3{font-family:var(--f-display);font-size:20px;margin:0}
+.sheet h4{font-family:var(--f-display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--teal);margin:22px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.sheet .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 16px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.sheet ul{margin:6px 0;padding-left:18px;font-size:12.5px}
+.sheet table{font-size:12.5px}
+.sheet td,.sheet th{padding:5px 6px}
+.params-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.params-grid .card{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;align-content:start}
+.params-grid .card h2{grid-column:1/-1;margin-bottom:2px}
+.ptab{display:grid;grid-template-columns:1.2fr .8fr .9fr;gap:6px;grid-column:1/-1;align-items:center}
+.ptab span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+@media (prefers-reduced-motion:no-preference){.tab,button.b{transition:color .15s,border-color .15s,background .15s}}
+@media print{
+  :root{--bg:#fff;--surface:#fff;--ink:#161616;--muted:#555;--line:#ccc;--teal:#01516A;--sunk:#f1efe7}
+  body{background:#fff}
+  header.top,aside.ficha,nav.tabs,#p-rel>.card,section.panel:not(#p-rel){display:none!important}
+  #p-rel{display:block!important}
+  .grid{display:block}.wrap{padding:0;max-width:none}
+  .sheet{border:0;box-shadow:none;padding:0;max-width:none}
+  .sheet h4{break-after:avoid}.sheet table{break-inside:auto}.sheet tr{break-inside:avoid}
+}
+@media (max-width:520px){fieldset{grid-template-columns:1fr 1fr}.kpi .v{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">Empregado doméstico · LC 150/2015</span>
+      <h1>Simulador de Custo Doméstico</h1>
+      <p class="lede">Quanto custa, de verdade, ter uma pessoa trabalhando em casa: salário líquido, guia DAE, provisões, rescisão e custo acumulado do contrato.</p>
+    </div>
+    <span class="stamp" id="stamp">Parâmetros 2026</span>
+  </header>
+
+  <div class="grid">
+    <aside class="ficha" aria-label="Dados do contrato">
+      <form id="form" autocomplete="off">
+        <fieldset>
+          <legend>Contrato</legend>
+          <div class="f"><label for="S">Salário mensal (cenário A)</label><input id="S" type="number" step="0.01" min="0" value="2000"></div>
+          <div class="f"><label for="S2">Comparar com (cenário B)</label><input id="S2" type="number" step="0.01" min="0" value="1621"></div>
+          <div class="f"><label for="ADM">Admissão</label><input id="ADM" type="date" value="2025-03-01"></div>
+          <div class="f"><label for="HOR">Horizonte (meses)</label><input id="HOR" type="number" min="1" max="120" value="24"></div>
+          <div class="f"><label for="MES_FER">Mês das férias</label>
+            <select id="MES_FER"><option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7" selected>Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option></select></div>
+          <div class="f"><label for="REAJ">Reajuste em janeiro (%)</label><input id="REAJ" type="number" step="0.01" min="0" value="0"></div>
+          <p class="hint">Exemplo preenchido: troque pelos dados reais do contrato.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Jornada e variáveis</legend>
+          <div class="f"><label for="JOR">Divisor de horas</label><input id="JOR" type="number" min="1" value="220"></div>
+          <div class="f"><label for="HE">Horas extras/mês</label><input id="HE" type="number" step="0.5" min="0" value="0"></div>
+          <div class="f full"><label for="HN">Horas noturnas/mês (22h às 5h, no relógio)</label><input id="HN" type="number" step="0.5" min="0" value="0"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Empregada</legend>
+          <div class="f"><label for="DEP">Dependentes no IR</label><input id="DEP" type="number" min="0" value="0"></div>
+          <div class="f"><label for="FIL">Filhos até 14 anos</label><input id="FIL" type="number" min="0" value="0"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Benefícios</legend>
+          <div class="f"><label for="VTD">Vale-transporte/dia (R$)</label><input id="VTD" type="number" step="0.01" min="0" value="0"></div>
+          <div class="f"><label for="DU">Dias trabalhados/mês</label><input id="DU" type="number" min="0" max="31" value="22"></div>
+          <div class="f"><label for="ALIM">Alimentação/mês (R$)</label><input id="ALIM" type="number" step="0.01" min="0" value="0"></div>
+          <div class="f"><label for="BEN">Outros benefícios/mês</label><input id="BEN" type="number" step="0.01" min="0" value="0"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Identificação no relatório</legend>
+          <div class="f full"><label for="NOME_EMP">Empregador(a)</label><input id="NOME_EMP" type="text" placeholder="Opcional"></div>
+          <div class="f full"><label for="NOME_FUNC">Empregada / função</label><input id="NOME_FUNC" type="text" placeholder="Opcional"></div>
+        </fieldset>
+      </form>
+    </aside>
+
+    <main style="min-width:0">
+      <nav class="tabs" role="tablist" aria-label="Módulos">
+        <button class="tab" role="tab" id="t-mensal" aria-controls="p-mensal" aria-selected="true">Custo mensal</button>
+        <button class="tab" role="tab" id="t-resc" aria-controls="p-resc" aria-selected="false">Rescisão</button>
+        <button class="tab" role="tab" id="t-contrato" aria-controls="p-contrato" aria-selected="false">Contrato</button>
+        <button class="tab" role="tab" id="t-param" aria-controls="p-param" aria-selected="false">Parâmetros</button>
+        <button class="tab" role="tab" id="t-rel" aria-controls="p-rel" aria-selected="false">Relatório</button>
+      </nav>
+
+      <section class="panel" id="p-mensal" role="tabpanel" aria-labelledby="t-mensal">
+        <div class="kpis" id="kpiMensal"></div>
+        <div class="card"><h2>Folha do mês e custo do empregador <small id="mensalSub"></small></h2><div class="tw"><table id="tMensal"></table></div></div>
+        <div class="callout info"><div>O custo provisionado mostra quanto um mês de trabalho custa já reservando 13º e férias. Para o ano, use o custo anual real: no mês de férias o salário sai da provisão e não é pago duas vezes.</div></div>
+      </section>
+
+      <section class="panel" id="p-resc" role="tabpanel" aria-labelledby="t-resc" hidden>
+        <div class="card">
+          <h2>Desligamento</h2>
+          <div class="row2">
+            <div class="f"><label for="DESL">Data do desligamento</label><input id="DESL" type="date" value="2026-10-19"></div>
+            <div class="f"><label for="AV_SJC">Aviso na dispensa sem justa causa</label><select id="AV_SJC"><option value="indenizado" selected>Indenizado</option><option value="trabalhado">Trabalhado</option></select></div>
+            <div class="f"><label for="AV_PD">Aviso no pedido de demissão</label><select id="AV_PD"><option value="nao" selected>Não cumprido (desconta 30 dias)</option><option value="cumprido">Cumprido</option></select></div>
+          </div>
+        </div>
+        <div class="kpis" id="kpiResc"></div>
+        <div class="card"><h2>Verbas rescisórias <small id="rescSub"></small></h2><div class="tw"><table id="tResc"></table></div></div>
+        <p class="note" id="rescNotes"></p>
+      </section>
+
+      <section class="panel" id="p-contrato" role="tabpanel" aria-labelledby="t-contrato" hidden>
+        <div class="kpis" id="kpiContrato"></div>
+        <div class="card chart"><h2>Desembolso mês a mês <small>por competência, cenário A</small></h2>
+          <div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Mês comum</span><span><i class="sw" style="background:var(--clay)"></i>Férias ou 13º</span><span><i class="sw" style="background:var(--teal)"></i>Mês de admissão</span></div>
+          <div id="chartMes"></div></div>
+        <div class="card chart"><h2>Custo acumulado e custo de saída <small>quanto você teria gasto se o contrato acabasse no fim de cada mês</small></h2>
+          <div class="legend"><span><i class="sw" style="background:var(--ink)"></i>Acumulado</span><span><i class="sw" style="background:var(--clay)"></i>+ dispensa sem justa causa (aviso indenizado)</span><span><i class="sw" style="background:var(--teal)"></i>+ pedido de demissão (aviso cumprido)</span></div>
+          <div id="chartAcum"></div></div>
+        <div class="card"><h2>Resumo por ano civil</h2><div class="tw"><table id="tAnos"></table></div></div>
+      </section>
+
+      <section class="panel" id="p-param" role="tabpanel" aria-labelledby="t-param" hidden>
+        <div class="callout"><div>Valores vigentes em 2026. Atualize aqui quando sair nova portaria do INSS (janeiro), novo salário mínimo ou mudança na tabela do IR. Tudo é recalculado na hora.</div></div>
+        <div class="params-grid" id="paramsGrid"></div>
+        <div class="btns"><button class="b ghost" type="button" id="resetParams">Restaurar valores de 2026</button></div>
+      </section>
+
+      <section class="panel" id="p-rel" role="tabpanel" aria-labelledby="t-rel" hidden>
+        <div class="card">
+          <h2>Relatório final</h2>
+          <p class="note" style="margin:0 0 10px">O relatório reúne premissas, custo mensal dos dois cenários, rescisão na data escolhida e observações.</p>
+          <div class="btns">
+            <button class="b" type="button" id="btnPdf">Baixar relatório em PDF</button>
+            <button class="b ghost" type="button" id="btnPrint">Imprimir relatório</button>
+            <button class="b ghost" type="button" id="btnCsv">Baixar mês a mês (CSV)</button>
+            <button class="b ghost" type="button" id="btnCopy">Copiar resumo</button>
+          </div>
+          <div class="status" id="relStatus" role="status"></div>
+          <textarea id="copyFallback" hidden style="width:100%;height:120px;margin-top:8px;font-family:var(--f-num);font-size:12px"></textarea>
+        </div>
+        <article class="sheet" id="sheet"></article>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+/*CORE-START*/
+const P2026 = {
+  sm:1621, teto:8475.55,
+  inss:[[1621,7.5],[2902.84,9],[4354.27,12],[8475.55,14]],
+  irrf:[[2428.80,0,0],[2826.65,7.5,182.16],[3751.05,15,394.16],[4664.68,22.5,675.49],[null,27.5,908.73]],
+  dep:189.59, simpl:607.20, redLim:5000, redTeto:7350, redA:978.62, redB:0.133145,
+  sfLim:1980.38, sfCota:67.54, pat:8, gil:0.8, fgts:8, ind:3.2, vt:6
+};
+const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+const DAY = 864e5;
+const D = s => { const [y,m,d] = s.split('-').map(Number); return Date.UTC(y, m-1, d); };
+const Y = t => new Date(t).getUTCFullYear(), M = t => new Date(t).getUTCMonth(), Dd = t => new Date(t).getUTCDate();
+const addDays = (t,n) => t + n*DAY;
+const addMonths = (t,n) => { const d = new Date(t); const y = d.getUTCFullYear(), m = d.getUTCMonth()+n, day = d.getUTCDate(); const last = new Date(Date.UTC(y, m+1, 0)).getUTCDate(); return Date.UTC(y, m, Math.min(day, last)); };
+const overlap = (a1,a2,b1,b2) => { const s = Math.max(a1,b1), e = Math.min(a2,b2); return e < s ? 0 : Math.round((e-s)/DAY)+1; };
+
+function makeCalc(P, I){
+  const encRate = (P.pat + P.gil + P.fgts + P.ind) / 100;
+  const inss = b => { let t = 0, lo = 0; for (const [hi,a] of P.inss){ if (b > lo) t += (Math.min(b,hi) - lo) * a/100; lo = hi; } return r2(t); };
+  const tabela = base => { if (base <= 0) return 0; for (const [lim,a,ded] of P.irrf){ if (lim === null || base <= lim) return Math.max(0, base*a/100 - ded); } return 0; };
+  const irrfMensal = (R, inssv, dep) => {
+    if (R <= 0) return 0;
+    const tab = tabela(R - Math.max(inssv + dep*P.dep, P.simpl));
+    const red = R <= P.redLim ? tab : (R <= P.redTeto ? Math.max(0, P.redA - P.redB*R) : 0);
+    return r2(Math.max(0, tab - red));
+  };
+  const irrf13 = (v, inssv, dep) => v <= 0 ? 0 : r2(tabela(v - inssv - dep*P.dep));
+  const vars = S => S/I.JOR * (I.HE*1.5 + I.HN*(60/52.5)*0.2);
+
+  function mensal(S){
+    const R = r2(S + vars(S));
+    const i = inss(R), ir = irrfMensal(R, i, I.DEP);
+    const vt = r2(I.VTD * I.DU), desc = r2(Math.min(P.vt/100*S, vt));
+    const sf = R <= P.sfLim ? r2(I.FIL * P.sfCota) : 0;
+    const liq = r2(R - i - ir - desc + sf);
+    const pat = r2(R*P.pat/100), gil = r2(R*P.gil/100), fgts = r2(R*P.fgts/100), ind = r2(R*P.ind/100);
+    const enc = r2(pat+gil+fgts+ind);
+    const dae = r2(i + ir + enc - sf);
+    const vtLiq = r2(vt - desc);
+    const caixa = r2(R + enc + vtLiq + I.ALIM + I.BEN);
+    const p13 = r2(R/12), pf = r2(R/12), pt = r2(R/36);
+    const encProv = r2((p13+pf+pt)*encRate);
+    const prov = r2(caixa + p13 + pf + pt + encProv);
+    const anual = r2(R*(40/3)*(1+encRate) + 11*(vtLiq + I.ALIM) + 12*I.BEN);
+    const fundoAno = r2(R*(40/3)*P.ind/100);
+    return {S,R,vars:r2(R-S),inss:i,irrf:ir,vt,desc,sf,liq,pat,gil,fgts,ind,enc,dae,vtLiq,caixa,p13,pf,pt,encProv,prov,anual,media:r2(anual/12),fundoAno,alim:I.ALIM,ben:I.BEN};
+  }
+
+  const ADM = D(I.ADM);
+  const avos13 = (year, start, end) => { let c = 0; for (let m = 0; m < 12; m++){ if (overlap(start, end, Date.UTC(year,m,1), Date.UTC(year,m+1,0)) >= 15) c++; } return c; };
+  const feriasAvos = (ps, end) => { if (end < ps) return 0; let c = 0; for (let k = 0; k <= 12; k++){ const s = addMonths(ps,k), e = addDays(addMonths(ps,k+1),-1); if (e <= end) c++; else { if (end >= s && Math.round((end-s)/DAY)+1 >= 15) c++; break; } } return Math.min(c,12); };
+  const periodsDone = x => { let k = 0; while (addDays(addMonths(ADM,12*(k+1)),-1) <= x) k++; return k; };
+
+  function timeline(n){
+    let S = I.S, fund = 0, taken = 0, acum = 0, paid13 = 0;
+    const p1 = {}, rows = [];
+    const ay = Y(ADM), am = M(ADM), ad = Dd(ADM);
+    const vt = I.VTD*I.DU;
+    for (let i = 0; i < n; i++){
+      const ms = Date.UTC(ay, am+i, 1), y = Y(ms), m = M(ms);
+      if (m === 0) paid13 = 0;
+      if (i > 0 && m === 0 && I.REAJ) S = r2(S*(1 + I.REAJ/100));
+      const frac = i === 0 ? Math.min(30, 30 - ad + 1)/30 : 1;
+      const Rfull = S + vars(S), R = r2(Rfull*frac);
+      const done = (() => { let k = 0; while (addMonths(ADM,12*(k+1)) <= ms) k++; return k; })();
+      const ferias = (m+1 === I.MES_FER) && i > 0 && done - taken >= 1;
+      if (ferias) taken++;
+      const terco = ferias ? r2(R/3) : 0;
+      const base = R + terco;
+      const desc = Math.min(P.vt/100*S, vt);
+      const benef = ferias ? I.BEN : ((vt - desc) + I.ALIM)*frac + I.BEN;
+      const enc = base*encRate;
+      const avos = avos13(y, ADM, Date.UTC(y,11,31));
+      let d13 = 0, enc13 = 0;
+      if (m === 10 && avos > 0){ p1[y] = r2(S*avos/12/2); d13 = p1[y]; enc13 = d13*(P.fgts+P.ind)/100; paid13 = d13; }
+      if (m === 11 && avos > 0){ const tot = r2(S*avos/12); d13 = r2(tot - (p1[y]||0)); enc13 = d13*(P.fgts+P.ind)/100 + tot*(P.pat+P.gil)/100; paid13 = tot; }
+      fund += (base + d13)*P.ind/100;
+      const cost = r2(base + enc + benef + d13 + enc13);
+      acum = r2(acum + cost);
+      rows.push({i, y, m, ms, S, R, ferias, terco, d13: r2(d13), encargos: r2(enc+enc13), benef: r2(benef), cost, acum, fund: r2(fund), taken, paid13, first: i === 0});
+    }
+    return rows;
+  }
+
+  function rescisao(rows, desl, tipo, aviso, opt = {}){
+    const idx = (Y(desl) - Y(ADM))*12 + (M(desl) - M(ADM));
+    if (idx < 0 || idx >= rows.length) return null;
+    const row = rows[idx], S = row.S, Rfull = S + vars(S);
+    const fundPrev = opt.exposure ? row.fund : (idx > 0 ? rows[idx-1].fund : 0);
+    let dia = Math.min(30, Dd(desl)); if (idx === 0) dia = Math.max(0, dia - Dd(ADM) + 1);
+    const saldo = opt.exposure ? 0 : r2(Rfull/30*dia);
+    const anos = periodsDone(desl);
+    let avisoDias = 0, avisoVal = 0, proj = desl, descAviso = 0;
+    if (tipo === 'sjc'){ avisoDias = Math.min(90, 30 + 3*anos); if (aviso === 'indenizado'){ avisoVal = r2(S/30*avisoDias); proj = addDays(desl, avisoDias); } }
+    else { avisoDias = 30; if (aviso === 'nao') descAviso = S; }
+    const yD = Y(desl), yP = Y(proj);
+    const av13 = avos13(yD, ADM, Math.min(proj, Date.UTC(yD,11,31)));
+    const av13n = yP > yD ? avos13(yP, ADM, proj) : 0;
+    const t13 = r2(S*av13/12), t13n = r2(S*av13n/12);
+    const paid = opt.exposure ? row.paid13 : (idx > 0 && rows[idx-1].y === yD ? rows[idx-1].paid13 : 0);
+    const quit = t13 > 0 && paid >= t13 - 0.01;
+    const d13 = r2(Math.max(0, t13 - paid) + t13n);
+    const inss13 = (quit ? 0 : inss(t13)) + (t13n ? inss(t13n) : 0);
+    const ir13 = (quit ? 0 : irrf13(t13, inss(t13), I.DEP)) + (t13n ? irrf13(t13n, inss(t13n), I.DEP) : 0);
+    const done = periodsDone(proj);
+    const taken = row.taken;
+    let vencVal = 0, vencN = 0, dobroN = 0;
+    for (let j = taken + 1; j <= done; j++){ const conc = addDays(addMonths(ADM,12*(j+1)),-1); const dobro = desl > conc; vencVal += S*(dobro ? 2 : 1); vencN++; if (dobro) dobroN++; }
+    vencVal = r2(vencVal);
+    const avF = feriasAvos(addMonths(ADM,12*done), proj);
+    const prop = r2(S*avF/12), terco = r2((vencVal + prop)/3);
+    const fgtsBase = saldo + avisoVal + d13;
+    const fgts = r2(fgtsBase*P.fgts/100), ind = r2(fgtsBase*P.ind/100);
+    const patBase = saldo + (quit ? 0 : t13) + t13n;
+    const pat = r2(patBase*(P.pat+P.gil)/100);
+    const inssS = saldo > 0 ? inss(saldo) : 0, irS = irrfMensal(saldo, inssS, I.DEP);
+    const bruto = r2(saldo + avisoVal + d13 + vencVal + prop + terco);
+    const descontos = r2(inssS + inss13 + irS + ir13);
+    const desc = r2(Math.min(descAviso, Math.max(0, bruto - descontos)));
+    const liquido = r2(bruto - descontos - desc);
+    const caixa = r2(bruto - desc + fgts + ind + pat);
+    const fundo = tipo === 'pd' ? r2(fundPrev + ind) : 0;
+    return {tipo, aviso, S, saldo, dia, anos, avisoDias, avisoVal, proj, av13, av13n, t13, paid, d13, vencN, dobroN, vencVal, avF, prop, terco,
+      inssS, inss13: r2(inss13), irS, ir13: r2(ir13), descontos, desc, liquido, fgts, ind, pat, bruto, caixa, fundo, custo: r2(caixa - fundo), fundAcum: r2(fundPrev)};
+  }
+  return {mensal, timeline, rescisao, inss, irrfMensal, encRate};
+}
+/*CORE-END*/
+
+/* ---------- estado, entradas, parâmetros ---------- */
+const $ = id => document.getElementById(id);
+const brl = v => (v < 0 ? '-' : '') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+const num = v => v.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+const pct = v => v.toLocaleString('pt-BR',{maximumFractionDigits:4}) + '%';
+const MES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const MESL = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const fdate = t => new Date(t).toLocaleDateString('pt-BR',{timeZone:'UTC'});
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const INPUT_IDS = ['S','S2','ADM','HOR','MES_FER','REAJ','JOR','HE','HN','DEP','FIL','VTD','DU','ALIM','BEN','NOME_EMP','NOME_FUNC','DESL','AV_SJC','AV_PD'];
+const TEXT_IDS = ['ADM','DESL','AV_SJC','AV_PD','NOME_EMP','NOME_FUNC'];
+let P = JSON.parse(JSON.stringify(P2026));
+const STORE = 'simulador-domestico-v1';
+
+const PARAM_FIELDS = [
+  {card:'Salário e INSS', items:[['sm','Salário mínimo (R$)'],['teto','Teto do INSS (R$)']], inss:true},
+  {card:'Imposto de Renda', items:[['dep','Dedução por dependente'],['simpl','Desconto simplificado'],['redLim','Isenção efetiva até'],['redTeto','Redução até'],['redA','Redução: constante'],['redB','Redução: fator']], irrf:true},
+  {card:'Encargos do empregador (%)', items:[['pat','INSS patronal'],['gil','GILRAT'],['fgts','FGTS'],['ind','Indenização 3,2%'],['vt','Desconto máx. VT']]},
+  {card:'Salário-família', items:[['sfLim','Limite de remuneração'],['sfCota','Cota por filho']]}
+];
+function buildParams(){
+  const g = $('paramsGrid'); g.innerHTML = '';
+  for (const c of PARAM_FIELDS){
+    const card = document.createElement('div'); card.className = 'card';
+    let h = `<h2>${c.card}</h2>`;
+    for (const [k,l] of c.items) h += `<div class="f"><label for="p_${k}">${l}</label><input id="p_${k}" data-p="${k}" type="number" step="any" value="${P[k]}"></div>`;
+    if (c.inss){
+      h += `<div class="ptab"><span>Faixa até (R$)</span><span>Alíquota %</span><span></span>`;
+      P.inss.forEach((r,i) => { h += `<input id="p_inss_l${i}" data-inss="${i}" data-c="0" type="number" step="any" value="${r[0]}" aria-label="INSS faixa ${i+1} até"><input id="p_inss_a${i}" data-inss="${i}" data-c="1" type="number" step="any" value="${r[1]}" aria-label="INSS faixa ${i+1} alíquota"><span></span>`; });
+      h += `</div>`;
+    }
+    if (c.irrf){
+      h += `<div class="ptab"><span>Base até (R$)</span><span>Alíquota %</span><span>Deduzir (R$)</span>`;
+      P.irrf.forEach((r,i) => { h += r[0] === null ? `<input id="p_irrf_l${i}" value="acima" disabled aria-label="última faixa">` : `<input id="p_irrf_l${i}" data-irrf="${i}" data-c="0" type="number" step="any" value="${r[0]}" aria-label="IR faixa ${i+1} até">`;
+        h += `<input id="p_irrf_a${i}" data-irrf="${i}" data-c="1" type="number" step="any" value="${r[1]}" aria-label="IR faixa ${i+1} alíquota"><input id="p_irrf_d${i}" data-irrf="${i}" data-c="2" type="number" step="any" value="${r[2]}" aria-label="IR faixa ${i+1} dedução">`; });
+      h += `</div>`;
+    }
+    card.innerHTML = h; g.appendChild(card);
+  }
+  g.querySelectorAll('input:not([disabled])').forEach(el => el.addEventListener('input', () => {
+    const v = parseFloat(el.value); if (!isFinite(v)) return;
+    if (el.dataset.p) P[el.dataset.p] = v;
+    else if (el.dataset.inss) P.inss[+el.dataset.inss][+el.dataset.c] = v;
+    else if (el.dataset.irrf) P.irrf[+el.dataset.irrf][+el.dataset.c] = v;
+    update(); save();
+  }));
+}
+
+function readInputs(){
+  const I = {};
+  for (const id of INPUT_IDS){ const v = $(id).value; I[id] = TEXT_IDS.includes(id) ? v : (parseFloat(v) || 0); }
+  I.MES_FER = parseInt($('MES_FER').value, 10);
+  I.HOR = Math.max(1, Math.min(120, Math.round(I.HOR)));
+  if (!I.JOR) I.JOR = 220;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(I.ADM)) I.ADM = '2025-03-01';
+  return I;
+}
+function save(){ try { const o = {P}; for (const id of INPUT_IDS) o[id] = $(id).value; localStorage.setItem(STORE, JSON.stringify(o)); } catch(e){} }
+function load(){ try { const o = JSON.parse(localStorage.getItem(STORE) || 'null'); if (!o) return; for (const id of INPUT_IDS) if (o[id] != null) $(id).value = o[id]; if (o.P && o.P.inss && o.P.irrf) P = o.P; } catch(e){} }
+
+/* ---------- cálculo e render ---------- */
+let LAST = null;
+function compute(){
+  const I = readInputs();
+  const C = makeCalc(P, I);
+  const A = C.mensal(I.S);
+  const B = I.S2 > 0 ? C.mensal(I.S2) : null;
+  const desl = /^\d{4}-\d{2}-\d{2}$/.test(I.DESL) ? D(I.DESL) : null;
+  const ADM = D(I.ADM);
+  const needIdx = desl ? (Y(desl)-Y(ADM))*12 + (M(desl)-M(ADM)) + 1 : 0;
+  const rowsAll = C.timeline(Math.max(I.HOR, needIdx, 1));
+  const rows = rowsAll.slice(0, I.HOR);
+  const expo = rows.map(r => {
+    const t = Date.UTC(r.y, r.m+1, 0);
+    const s = C.rescisao(rows, t, 'sjc', 'indenizado', {exposure:true});
+    const p = C.rescisao(rows, t, 'pd', 'cumprido', {exposure:true});
+    return {sjc: r2(r.acum + (s ? s.custo : 0)), pd: r2(r.acum + (p ? p.custo : 0))};
+  });
+  let sjc = null, pd = null, deslErr = '';
+  if (!desl) deslErr = 'Informe a data do desligamento.';
+  else if (desl < ADM) deslErr = 'A data do desligamento é anterior à admissão.';
+  else { sjc = C.rescisao(rowsAll, desl, 'sjc', I.AV_SJC); pd = C.rescisao(rowsAll, desl, 'pd', I.AV_PD); }
+  LAST = {I, A, B, rows, expo, sjc, pd, deslErr, desl, ADM, encRate: C.encRate};
+  return LAST;
+}
+
+function kpi(k, v, s, hl){ return `<div class="kpi${hl?' hl':''}"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${s}</span></div>`; }
+
+function mensalRows(A, B){
+  const col = (f) => `<td class="n">${brl(f(A))}</td>` + (B ? `<td class="n">${brl(f(B))}</td>` : '');
+  const g = t => `<tr class="grp"><td colspan="${B?3:2}">${t}</td></tr>`;
+  const r = (l, f, cls='') => `<tr class="${cls}"><td>${l}</td>${col(f)}</tr>`;
+  let h = `<thead><tr><th>Item</th><th>Cenário A</th>${B?'<th>Cenário B</th>':''}</tr></thead><tbody>`;
+  h += g('Empregada');
+  h += r('Salário contratado', x => x.S);
+  if (A.vars || (B && B.vars)) h += r('Horas extras e adicional noturno', x => x.vars);
+  h += r('Remuneração do mês', x => x.R);
+  h += r('(−) INSS da empregada', x => -x.inss, 'minus');
+  h += r('(−) IRRF', x => -x.irrf, 'minus');
+  if (A.desc || (B && B.desc)) h += r('(−) Desconto de vale-transporte (até 6%)', x => -x.desc, 'minus');
+  if (A.sf || (B && B.sf)) h += r('(+) Salário-família', x => x.sf);
+  h += r('Salário líquido (pagar até dia 7)', x => x.liq, 'tot');
+  h += g('Encargos do mês');
+  h += r(`INSS patronal ${pct(P.pat)}`, x => x.pat);
+  h += r(`GILRAT ${pct(P.gil)}`, x => x.gil);
+  h += r(`FGTS ${pct(P.fgts)}`, x => x.fgts);
+  h += r(`Indenização compensatória ${pct(P.ind)}`, x => x.ind);
+  h += r('Subtotal encargos', x => x.enc, 'tot');
+  h += r('Guia DAE do mês (vence dia 20)', x => x.dae);
+  if (A.vtLiq || A.alim || A.ben || (B && (B.vtLiq || B.alim || B.ben))){
+    h += g('Benefícios');
+    h += r('Vale-transporte (parte do empregador)', x => x.vtLiq);
+    h += r('Alimentação', x => x.alim);
+    h += r('Outros benefícios', x => x.ben);
+  }
+  h += r('Custo de caixa de um mês comum', x => x.caixa, 'tot');
+  h += g('Provisões');
+  h += r('13º salário (1/12)', x => x.p13);
+  h += r('Férias (1/12)', x => x.pf);
+  h += r('Terço de férias (1/36)', x => x.pt);
+  h += r(`Encargos sobre provisões (${pct(r2((P.pat+P.gil+P.fgts+P.ind)))})`, x => x.encProv);
+  h += r('Custo mensal provisionado', x => x.prov, 'tot');
+  h += g('Ano');
+  h += r('Custo anual real', x => x.anual, 'tot');
+  h += r('Média mensal do custo anual', x => x.media);
+  h += r('Parte que pode voltar a você (fundo de 3,2%)', x => x.fundoAno);
+  return h + '</tbody>';
+}
+
+function rescRows(s, p){
+  const r = (l, a, b, cls='') => `<tr class="${cls}"><td>${l}</td><td class="n">${a===null?'—':brl(a)}</td><td class="n">${b===null?'—':brl(b)}</td></tr>`;
+  const g = t => `<tr class="grp"><td colspan="3">${t}</td></tr>`;
+  let h = `<thead><tr><th>Verba</th><th>Sem justa causa</th><th>Pedido de demissão</th></tr></thead><tbody>`;
+  h += g('Verbas da empregada');
+  h += r(`Saldo de salário (${s.dia} dias)`, s.saldo, p.saldo);
+  h += r(`Aviso prévio ${s.avisoVal ? 'indenizado ('+s.avisoDias+' dias)' : ''}`, s.avisoVal || null, null);
+  h += r(`13º proporcional (${s.av13 + s.av13n}/12 e ${p.av13}/12)${s.paid ? ' menos 1ª parcela paga' : ''}`, s.d13, p.d13);
+  if (s.vencN || p.vencN) h += r(`Férias vencidas${s.dobroN ? ' (em dobro)' : ''}`, s.vencVal, p.vencVal);
+  h += r(`Férias proporcionais (${s.avF}/12 e ${p.avF}/12)`, s.prop, p.prop);
+  h += r('Terço de férias', s.terco, p.terco);
+  h += r('Total bruto', s.bruto, p.bruto, 'tot');
+  h += r('(−) INSS da empregada', -(s.inssS + s.inss13), -(p.inssS + p.inss13), 'minus');
+  if (s.irS + s.ir13 + p.irS + p.ir13 > 0) h += r('(−) IRRF', -(s.irS + s.ir13), -(p.irS + p.ir13), 'minus');
+  h += r('(−) Desconto do aviso não cumprido', null, p.desc ? -p.desc : null, 'minus');
+  h += r('Líquido para a empregada', s.liquido, p.liquido, 'tot');
+  h += g('Encargos do empregador');
+  h += r(`FGTS ${pct(P.fgts)} sobre as verbas`, s.fgts, p.fgts);
+  h += r(`Indenização ${pct(P.ind)} sobre as verbas`, s.ind, p.ind);
+  h += r(`INSS patronal + GILRAT (${pct(r2(P.pat+P.gil))})`, s.pat, p.pat);
+  h += r('Desembolso do empregador', s.caixa, p.caixa, 'tot');
+  h += r('(−) Fundo de 3,2% que volta para você (estimado)', null, p.fundo ? -p.fundo : null, 'minus');
+  h += r('Custo líquido da saída', s.custo, p.custo, 'tot');
+  return h + '</tbody>';
+}
+
+/* ---------- gráficos SVG ---------- */
+function niceMax(v){ const e = Math.pow(10, Math.floor(Math.log10(v))); const f = v/e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
+function axis(W, H, l, t, b, max, fmt){
+  let s = ''; const steps = 4;
+  for (let k = 0; k <= steps; k++){
+    const v = max*k/steps, y = H - b - (H - t - b)*k/steps;
+    s += `<line x1="${l}" x2="${W-8}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+    s += `<text x="${l-6}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--f-num)">${fmt(v)}</text>`;
+  }
+  return s;
+}
+const kfmt = v => v >= 1000 ? (v/1000).toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' mil' : Math.round(v).toString();
+function xLabels(rows, W, l, b, H, xAt){
+  const step = rows.length <= 12 ? 1 : rows.length <= 24 ? 2 : rows.length <= 48 ? 4 : 6;
+  return rows.map((r,i) => (i % step === 0 || i === rows.length-1) && !(i === rows.length-1 && i % step !== 0 && i % step < step/2) ? `<text x="${xAt(i)}" y="${H-b+16}" text-anchor="middle" font-size="11" fill="var(--muted)">${MES[r.m]}/${String(r.y).slice(2)}</text>` : '').join('');
+}
+function chartMes(rows){
+  const W = 760, H = 270, l = 56, t = 18, b = 30;
+  const max = niceMax(Math.max(...rows.map(r => r.cost)) * 1.08);
+  const band = (W - l - 8)/rows.length, bw = Math.max(2, band*0.66);
+  const xAt = i => l + i*band + band/2;
+  const y = v => H - b - (H - t - b)*v/max;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Desembolso mensal do empregador">` + axis(W,H,l,t,b,max,kfmt);
+  rows.forEach((r,i) => {
+    const hot = r.ferias || r.d13 > 0, fill = r.first ? 'var(--teal)' : hot ? 'var(--clay)' : 'var(--bar)';
+    const tip = `${MES[r.m]}/${r.y}: ${brl(r.cost)}${r.ferias ? ' (férias + 1/3)' : ''}${r.d13 ? ' (13º)' : ''}${r.first ? ' (admissão, proporcional)' : ''}`;
+    s += `<rect x="${xAt(i)-bw/2}" y="${y(r.cost)}" width="${bw}" height="${H-b-y(r.cost)}" fill="${fill}" rx="1"><title>${tip}</title></rect>`;
+  });
+  s += `<line x1="${l}" x2="${W-8}" y1="${H-b}" y2="${H-b}" stroke="var(--ink)" stroke-width="1"/>`;
+  s += xLabels(rows, W, l, b, H, xAt) + '</svg>';
+  return s;
+}
+function chartAcum(rows, expo){
+  const W = 760, H = 290, l = 60, t = 18, b = 30;
+  const max = niceMax(Math.max(...expo.map(e => Math.max(e.sjc, e.pd)), rows.at(-1).acum) * 1.05);
+  const xAt = i => rows.length === 1 ? (l + W)/2 : l + 6 + i*(W - l - 20)/(rows.length - 1);
+  const y = v => H - b - (H - t - b)*v/max;
+  const path = f => rows.map((r,i) => `${i ? 'L' : 'M'}${xAt(i).toFixed(1)},${y(f(i)).toFixed(1)}`).join('');
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Custo acumulado e custo de saída">` + axis(W,H,l,t,b,max,kfmt);
+  s += `<path d="${path(i => expo[i].sjc)}" fill="none" stroke="var(--clay)" stroke-width="2"/>`;
+  s += `<path d="${path(i => expo[i].pd)}" fill="none" stroke="var(--teal)" stroke-width="2" stroke-dasharray="5 4"/>`;
+  s += `<path d="${path(i => rows[i].acum)}" fill="none" stroke="var(--ink)" stroke-width="2.5"/>`;
+  rows.forEach((r,i) => { s += `<rect x="${xAt(i)-4}" y="${t}" width="8" height="${H-t-b}" fill="transparent"><title>${MES[r.m]}/${r.y}\nAcumulado: ${brl(r.acum)}\n+ sem justa causa: ${brl(expo[i].sjc)}\n+ pedido de demissão: ${brl(expo[i].pd)}</title></rect>`; });
+  const last = rows.length - 1;
+  s += `<circle cx="${xAt(last)}" cy="${y(rows[last].acum)}" r="4" fill="var(--ink)"/>`;
+  s += `<text x="${xAt(last)-6}" y="${y(rows[last].acum)+18}" text-anchor="end" font-size="12" fill="var(--ink)" font-family="var(--f-num)">${brl(rows[last].acum)}</text>`;
+  s += `<line x1="${l}" x2="${W-8}" y1="${H-b}" y2="${H-b}" stroke="var(--ink)" stroke-width="1"/>`;
+  s += xLabels(rows, W, l, b, H, xAt) + '</svg>';
+  return s;
+}
+
+function anos(rows){
+  const m = new Map();
+  for (const r of rows){ const o = m.get(r.y) || {y:r.y, n:0, c:0, acum:0}; o.n++; o.c = r2(o.c + r.cost); o.acum = r.acum; m.set(r.y, o); }
+  return [...m.values()];
+}
+
+function render(){
+  const {I, A, B, rows, expo, sjc, pd, deslErr} = compute();
+  $('stamp').textContent = `Parâmetros 2026 · mínimo ${brl(P.sm)}`;
+  // Mensal
+  $('kpiMensal').innerHTML =
+    kpi('Custo mensal provisionado', brl(A.prov), `${num(r2(A.prov/A.S))} × o salário`, true) +
+    kpi('Custo de caixa (mês comum)', brl(A.caixa), `DAE de ${brl(A.dae)} no dia 20`) +
+    kpi('Custo anual real', brl(A.anual), `média de ${brl(A.media)}/mês`) +
+    kpi('Salário líquido', brl(A.liq), `INSS de ${brl(A.inss)}${A.irrf ? ', IR de '+brl(A.irrf) : ', sem IR'}`);
+  $('mensalSub').textContent = B ? `cenário A ${brl(A.S)} · cenário B ${brl(B.S)}` : `salário ${brl(A.S)}`;
+  $('tMensal').innerHTML = mensalRows(A, B);
+  // Rescisão
+  if (deslErr || !sjc || !pd){
+    $('kpiResc').innerHTML = ''; $('tResc').innerHTML = `<tbody><tr><td>${deslErr || 'Data fora do período simulado.'}</td></tr></tbody>`; $('rescNotes').textContent = ''; $('rescSub').textContent = '';
+  } else {
+    $('kpiResc').innerHTML =
+      kpi('Sem justa causa', brl(sjc.custo), `líquido da empregada ${brl(sjc.liquido)}`, true) +
+      kpi('Pedido de demissão', brl(pd.custo), pd.fundo ? `já abatidos ${brl(pd.fundo)} do fundo de 3,2%` : 'custo líquido') +
+      kpi('Tempo de casa', `${sjc.anos} ano${sjc.anos === 1 ? '' : 's'}`, `aviso proporcional de ${sjc.avisoDias} dias`);
+    $('rescSub').textContent = `desligamento em ${fdate(LAST.desl)} · salário ${brl(sjc.S)}`;
+    $('tResc').innerHTML = rescRows(sjc, pd);
+    const n = [];
+    if (sjc.avisoVal) n.push(`O aviso indenizado de ${sjc.avisoDias} dias projeta o contrato até ${fdate(sjc.proj)}, o que entra na contagem de 13º e férias.`);
+    else n.push('Com aviso trabalhado, a jornada cai 2 horas por dia ou a empregada folga 7 dias corridos; o salário do período já está no custo mensal.');
+    n.push(`No pedido de demissão, o fundo de 3,2% acumulado (estimado em ${brl(pd.fundo)} sem correção) volta para você; na dispensa sem justa causa ele fica com a empregada, que também saca o FGTS e recebe seguro-desemprego pago pelo governo.`);
+    n.push('Prazo para pagar as verbas: 10 dias do término do contrato.');
+    $('rescNotes').textContent = n.join(' ');
+  }
+  // Contrato
+  const tot = rows.at(-1).acum, maxR = rows.reduce((a,r) => r.cost > a.cost ? r : a, rows[0]);
+  const last = expo.at(-1);
+  $('kpiContrato').innerHTML =
+    kpi(`Total em ${rows.length} meses`, brl(tot), `média de ${brl(r2(tot/rows.length))}/mês`, true) +
+    kpi('Maior mês', brl(maxR.cost), `${MESL[maxR.m]} de ${maxR.y}`) +
+    kpi('Se encerrar no último mês', brl(last.sjc), `sem justa causa · pedido: ${brl(last.pd)}`);
+  $('chartMes').innerHTML = chartMes(rows);
+  $('chartAcum').innerHTML = chartAcum(rows, expo);
+  $('tAnos').innerHTML = `<thead><tr><th>Ano</th><th>Meses</th><th>Custo no ano</th><th>Acumulado</th></tr></thead><tbody>` +
+    anos(rows).map(a => `<tr><td>${a.y}</td><td class="n">${a.n}</td><td class="n">${brl(a.c)}</td><td class="n">${brl(a.acum)}</td></tr>`).join('') + '</tbody>';
+  renderSheet();
+}
+
+/* ---------- relatório ---------- */
+function reportData(){
+  const {I, A, B, rows, expo, sjc, pd} = LAST;
+  const premissas = [
+    `Salário de ${brl(I.S)}${B ? ` (cenário B: ${brl(I.S2)})` : ''}, admissão em ${fdate(D(I.ADM))}, jornada com divisor ${I.JOR}.`,
+    `Férias de 30 dias em ${MESL[I.MES_FER-1]}, sem abono; 13º em duas parcelas (novembro e dezembro).`,
+    `Reajuste anual em janeiro: ${num(I.REAJ)}%. Horizonte de ${I.HOR} meses.`,
+    (I.HE || I.HN) ? `Variáveis: ${num(I.HE)} h extras e ${num(I.HN)} h noturnas por mês.` : 'Sem horas extras e sem trabalho noturno.',
+    `${I.DEP} dependente(s) no IR; ${I.FIL} filho(s) para salário-família.`,
+    (I.VTD || I.ALIM || I.BEN) ? `Benefícios: VT de ${brl(I.VTD)}/dia em ${I.DU} dias, alimentação de ${brl(I.ALIM)} e outros de ${brl(I.BEN)} por mês.` : 'Sem vale-transporte, alimentação ou outros benefícios.',
+    'Mês comercial de 30 dias para saldo de salário e aviso prévio.'
+  ];
+  const ml = [
+    ['Remuneração do mês', x => x.R], ['INSS da empregada', x => x.inss], ['IRRF', x => x.irrf], ['Salário líquido', x => x.liq, 1],
+    ['INSS patronal', x => x.pat], ['GILRAT', x => x.gil], ['FGTS', x => x.fgts], ['Indenização 3,2%', x => x.ind], ['Subtotal encargos', x => x.enc, 1],
+    ['Guia DAE (vence dia 20)', x => x.dae], ['Benefícios (parte do empregador)', x => r2(x.vtLiq + x.alim + x.ben)], ['Custo de caixa (mês comum)', x => x.caixa, 1],
+    ['Provisão 13º', x => x.p13], ['Provisão férias', x => x.pf], ['Provisão 1/3 férias', x => x.pt], ['Encargos sobre provisões', x => x.encProv],
+    ['Custo mensal provisionado', x => x.prov, 1], ['Custo anual real', x => x.anual, 1], ['Média mensal do custo anual', x => x.media]
+  ];
+  const mensal = ml.map(([l,f,b]) => ({l, a: f(A), b: B ? f(B) : null, bold: !!b}));
+  const ano = anos(rows);
+  let resc = null;
+  if (sjc && pd){
+    resc = [
+      ['Saldo de salário', sjc.saldo, pd.saldo],
+      ['Aviso prévio indenizado', sjc.avisoVal, 0],
+      ['13º proporcional', sjc.d13, pd.d13],
+      ['Férias vencidas', sjc.vencVal, pd.vencVal],
+      ['Férias proporcionais', sjc.prop, pd.prop],
+      ['Terço de férias', sjc.terco, pd.terco],
+      ['Total bruto', sjc.bruto, pd.bruto, 1],
+      ['(-) INSS e IRRF da empregada', -sjc.descontos, -pd.descontos],
+      ['(-) Desconto do aviso não cumprido', 0, -pd.desc],
+      ['Líquido para a empregada', sjc.liquido, pd.liquido, 1],
+      ['FGTS + indenização 3,2% sobre as verbas', r2(sjc.fgts + sjc.ind), r2(pd.fgts + pd.ind)],
+      ['INSS patronal + GILRAT', sjc.pat, pd.pat],
+      ['Desembolso do empregador', sjc.caixa, pd.caixa, 1],
+      ['(-) Fundo de 3,2% que volta para você', 0, -pd.fundo],
+      ['Custo líquido da saída', sjc.custo, pd.custo, 1]
+    ].map(([l,a,b,bold]) => ({l, a, b, bold: !!bold}));
+  }
+  const param = [
+    ['Salário mínimo', brl(P.sm)], ['Teto do INSS', brl(P.teto)],
+    ['INSS da empregada', P.inss.map((r,i) => `${pct(r[1])} até ${num(r[0])}`).join('; ')],
+    ['IRRF', P.irrf.map(r => r[0] === null ? `${pct(r[1])} acima (deduzir ${num(r[2])})` : `${pct(r[1])} até ${num(r[0])}${r[2] ? ' (deduzir '+num(r[2])+')' : ''}`).join('; ')],
+    ['Redução do IR (Lei 15.270/2025)', `zera até ${brl(P.redLim)}; ${num(P.redA)} - ${String(P.redB).replace('.',',')} × renda até ${brl(P.redTeto)}`],
+    ['Dependente / simplificado', `${brl(P.dep)} / ${brl(P.simpl)}`],
+    ['Encargos do empregador', `INSS ${pct(P.pat)}, GILRAT ${pct(P.gil)}, FGTS ${pct(P.fgts)}, indenização ${pct(P.ind)}`],
+    ['Salário-família', `${brl(P.sfCota)} por filho até ${brl(P.sfLim)}`]
+  ];
+  const obs = [
+    'Salário pago até o dia 7 do mês seguinte ao trabalhado.',
+    'A guia DAE mensal vence no dia 20 do mês seguinte à competência.',
+    'Os 3,2% formam um fundo compensatório: ficam com a empregada na dispensa sem justa causa e voltam ao empregador no pedido de demissão ou na justa causa.',
+    'Sobre 13º, férias e terço incidem os mesmos encargos do salário (INSS patronal, GILRAT, FGTS e 3,2%).',
+    'Simulação de planejamento. Confira os valores no eSocial Doméstico antes de pagar.'
+  ];
+  return {I, A, B, rows, expo, premissas, mensal, ano, resc, param, obs, sjc, pd, geradoEm: new Date()};
+}
+
+function renderSheet(){
+  const R = reportData();
+  const tbl = (head, body) => `<div class="tw"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const tot = R.rows.at(-1).acum;
+  let h = `<h3>Relatório de custo do empregado doméstico</h3>
+  <div class="meta"><span>Empregador(a): ${esc(R.I.NOME_EMP || '—')}</span><span>Empregada: ${esc(R.I.NOME_FUNC || '—')}</span><span>Gerado em ${R.geradoEm.toLocaleDateString('pt-BR')}</span><span>Parâmetros legais de 2026</span></div>`;
+  h += `<h4>Resumo</h4><ul>
+    <li>Custo mensal provisionado de ${brl(R.A.prov)} (${num(r2(R.A.prov/R.A.S))} × o salário de ${brl(R.A.S)}).</li>
+    <li>Custo anual real de ${brl(R.A.anual)}; guia DAE de ${brl(R.A.dae)} por mês.</li>
+    <li>Em ${R.rows.length} meses de contrato, desembolso total de ${brl(tot)}.</li>
+    ${R.resc ? `<li>Rescisão em ${fdate(LAST.desl)}: ${brl(R.sjc.custo)} sem justa causa; ${brl(R.pd.custo)} em pedido de demissão.</li>` : ''}
+  </ul>`;
+  h += `<h4>Premissas</h4><ul>${R.premissas.map(p => `<li>${esc(p)}</li>`).join('')}</ul>`;
+  h += `<h4>Custo mensal</h4>` + tbl(['Item', 'Cenário A', ...(R.B ? ['Cenário B'] : [])], R.mensal.map(m => `<tr class="${m.bold?'tot':''}"><td>${m.l}</td><td class="n">${brl(m.a)}</td>${R.B ? `<td class="n">${brl(m.b)}</td>` : ''}</tr>`).join(''));
+  if (R.resc) h += `<h4>Rescisão em ${fdate(LAST.desl)}</h4>` + tbl(['Verba','Sem justa causa','Pedido de demissão'], R.resc.map(m => `<tr class="${m.bold?'tot':''}"><td>${m.l}</td><td class="n">${brl(m.a)}</td><td class="n">${brl(m.b)}</td></tr>`).join(''));
+  h += `<h4>Observações</h4><ul>${R.obs.map(o => `<li>${esc(o)}</li>`).join('')}</ul>`;
+  $('sheet').innerHTML = h;
+}
+
+const pdfText = s => String(s).replace(/[−–—]/g,'-').replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/…/g,'...').replace(/≤/g,'<=');
+function buildPdf(){
+  const R = reportData();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const W = doc.internal.pageSize.getWidth(), mx = 44;
+  const TEAL = [1,81,106], CLAY = [173,68,2], INK = [22,22,22], MUT = [95,98,96], BEIGE = [226,223,208];
+  doc.setFillColor(...TEAL); doc.rect(0, 0, W, 6, 'F');
+  doc.setTextColor(...TEAL); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text(pdfText('EMPREGADO DOMÉSTICO · LC 150/2015'), mx, 36);
+  doc.setTextColor(...INK); doc.setFontSize(18); doc.text(pdfText('Relatório de custo do empregado doméstico'), mx, 58);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...MUT);
+  doc.text(pdfText(`Empregador(a): ${R.I.NOME_EMP || '-'}    Empregada: ${R.I.NOME_FUNC || '-'}`), mx, 76);
+  doc.text(pdfText(`Gerado em ${R.geradoEm.toLocaleDateString('pt-BR')} · parâmetros legais de 2026`), mx, 89);
+  let y = 104;
+  const head = (t) => { if (y > 760) { doc.addPage(); y = 50; } doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...TEAL); doc.text(pdfText(t.toUpperCase()), mx, y); doc.setDrawColor(...BEIGE); doc.line(mx, y+4, W-mx, y+4); y += 14; };
+  const bullets = (arr) => { doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...INK); for (const b of arr){ const lines = doc.splitTextToSize(pdfText('• ' + b), W - 2*mx); if (y + lines.length*12 > 800){ doc.addPage(); y = 50; } doc.text(lines, mx, y); y += lines.length*12 + 2; } y += 6; };
+  const table = (h, body, boldRows, opts={}) => {
+    doc.autoTable({startY: y, head:[h.map(pdfText)], body: body.map(r => r.map(pdfText)), margin:{left:mx, right:mx}, theme:'plain',
+      styles:{fontSize:9, cellPadding:4, textColor:INK, lineColor:BEIGE, lineWidth:{bottom:0.5}},
+      headStyles:{fillColor:TEAL, textColor:[255,255,255], fontStyle:'bold'},
+      columnStyles: opts.cols || {1:{halign:'right'},2:{halign:'right'},3:{halign:'right'}},
+      didParseCell: d => { if (d.section === 'body' && boldRows && boldRows.includes(d.row.index)){ d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = [240,238,230]; } }});
+    y = doc.lastAutoTable.finalY + 18;
+  };
+  head('Resumo');
+  bullets([
+    `Custo mensal provisionado: ${brl(R.A.prov)} (${num(r2(R.A.prov/R.A.S))} × o salário de ${brl(R.A.S)}).`,
+    `Custo anual real: ${brl(R.A.anual)}. Guia DAE do mês: ${brl(R.A.dae)}, com vencimento no dia 20. Salário pago até o dia 7.`,
+    `Desembolso total em ${R.rows.length} meses de contrato: ${brl(R.rows.at(-1).acum)}.`,
+    ...(R.resc ? [`Rescisão em ${fdate(LAST.desl)}: ${brl(R.sjc.custo)} sem justa causa; ${brl(R.pd.custo)} em pedido de demissão.`] : [])
+  ]);
+  head('Premissas'); bullets(R.premissas);
+  head('Custo mensal');
+  table(['Item','Cenário A', ...(R.B ? ['Cenário B'] : [])], R.mensal.map(m => [m.l, brl(m.a), ...(R.B ? [brl(m.b)] : [])]), R.mensal.map((m,i) => m.bold ? i : -1));
+  // gráfico de barras mês a mês
+  if (y > 600){ doc.addPage(); y = 50; }
+  head('Desembolso mês a mês');
+  const cx = mx + 34, cw = W - 2*mx - 34, ch = 130, top = y + 4, maxV = niceMax(Math.max(...R.rows.map(r => r.cost))*1.08);
+  doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.setDrawColor(...BEIGE);
+  for (let k = 0; k <= 4; k++){ const yy = top + ch - ch*k/4; doc.line(cx, yy, cx+cw, yy); doc.text(pdfText(kfmt(maxV*k/4)), cx-4, yy+2.5, {align:'right'}); }
+  const band = cw / R.rows.length, bw = Math.max(1.5, band*0.66), step = R.rows.length <= 12 ? 1 : R.rows.length <= 24 ? 2 : R.rows.length <= 48 ? 4 : 6;
+  R.rows.forEach((r,i) => {
+    const hh = ch * r.cost / maxV, x = cx + i*band + (band-bw)/2;
+    doc.setFillColor(...(r.first ? TEAL : (r.ferias || r.d13 > 0) ? CLAY : [143,179,189]));
+    doc.rect(x, top + ch - hh, bw, hh, 'F');
+    if (i % step === 0) doc.text(`${MES[r.m]}/${String(r.y).slice(2)}`, x + bw/2, top + ch + 10, {align:'center'});
+  });
+  y = top + ch + 22;
+  doc.setFontSize(8); doc.setTextColor(...MUT); doc.text(pdfText('Laranja: meses de férias ou 13º. Azul-petróleo: mês de admissão (proporcional).'), mx, y); y += 18;
+  if (R.resc){ head(`Rescisão em ${fdate(LAST.desl)}`); table(['Verba','Sem justa causa','Pedido de demissão'], R.resc.map(m => [m.l, brl(m.a), brl(m.b)]), R.resc.map((m,i) => m.bold ? i : -1)); }
+  head('Observações'); bullets(R.obs);
+  const pages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pages; p++){ doc.setPage(p); doc.setFontSize(8); doc.setTextColor(...MUT); doc.text(pdfText(`Simulador de Custo Doméstico · página ${p} de ${pages}`), W - mx, 822, {align:'right'}); }
+  return doc.output('arraybuffer');
+}
+
+function buildCsv(){
+  const {rows, expo} = LAST;
+  const n = v => num(v).replace(/\./g,'');
+  const lines = ['Competência;Salário;Remuneração;Terço de férias;13º pago;Encargos;Benefícios;Custo do mês;Acumulado;Acumulado + saída sem justa causa;Acumulado + saída pedido de demissão;Fundo 3,2% acumulado'];
+  rows.forEach((r,i) => lines.push([`${String(r.m+1).padStart(2,'0')}/${r.y}`, n(r.S), n(r.R), n(r.terco), n(r.d13), n(r.encargos), n(r.benef), n(r.cost), n(r.acum), n(expo[i].sjc), n(expo[i].pd), n(r.fund)].join(';')));
+  return '﻿' + lines.join('\r\n');
+}
+function resumoTexto(){
+  const R = reportData();
+  const t = [`Simulação de custo – empregado doméstico (${R.geradoEm.toLocaleDateString('pt-BR')})`,
+    `Salário: ${brl(R.A.S)} | líquido da empregada: ${brl(R.A.liq)}`,
+    `Custo mensal provisionado: ${brl(R.A.prov)} | caixa de mês comum: ${brl(R.A.caixa)} | DAE: ${brl(R.A.dae)} (dia 20) | salário até dia 7`,
+    `Custo anual real: ${brl(R.A.anual)} | ${R.rows.length} meses: ${brl(R.rows.at(-1).acum)}`];
+  if (R.B) t.push(`Cenário B (${brl(R.B.S)}): provisionado ${brl(R.B.prov)} | anual ${brl(R.B.anual)}`);
+  if (R.resc) t.push(`Rescisão em ${fdate(LAST.desl)}: sem justa causa ${brl(R.sjc.custo)} | pedido de demissão ${brl(R.pd.custo)}`);
+  return t.join('\n');
+}
+
+/* ---------- downloads ---------- */
+let DL = null;
+const status = m => { $('relStatus').textContent = m; };
+function localDownload(filename, data){
+  const type = filename.endsWith('.pdf') ? 'application/pdf' : 'text/csv;charset=utf-8';
+  const url = URL.createObjectURL(new Blob([data], {type}));
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  status(`Arquivo ${filename} baixado.`);
+}
+async function saveFile(filename, data){
+  if (!DL){ try { localDownload(filename, data); } catch(e){ status('Não foi possível baixar o arquivo neste navegador.'); } return; }
+  try { const r = await DL.save({filename, data}); status(r.status === 'saved' ? `Arquivo ${filename} enviado para download.` : 'Arquivo entregue.'); }
+  catch(e){ const c = e && e.code; status(c === 'declined' ? 'Download cancelado.' : c === 'rate_limited' ? 'Já existe um download aguardando confirmação.' : 'Não foi possível baixar o arquivo nesta visualização.'); }
+}
+$('btnPdf').addEventListener('click', () => {
+  if (!window.jspdf || !window.jspdf.jsPDF){ status('O gerador de PDF não carregou. Recarregue a página.'); return; }
+  try { const buf = buildPdf(); const nm = ($('NOME_FUNC').value || 'simulacao').trim().replace(/[^\wÀ-ú -]/g,'').replace(/\s+/g,'-').toLowerCase() || 'simulacao'; saveFile(`relatorio-custo-domestico-${nm}.pdf`, buf); }
+  catch(e){ status('Erro ao montar o PDF: ' + (e.message || e)); }
+});
+$('btnCsv').addEventListener('click', () => saveFile('custo-domestico-mes-a-mes.csv', buildCsv()));
+$('btnCopy').addEventListener('click', () => {
+  const txt = resumoTexto(), fb = $('copyFallback');
+  const fallback = () => { fb.hidden = false; fb.value = txt; fb.focus(); fb.select(); status('Selecione e copie o texto abaixo.'); };
+  try { navigator.clipboard.writeText(txt).then(() => status('Resumo copiado.'), fallback); } catch(e){ fallback(); }
+});
+
+/* ---------- abas e inicialização ---------- */
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => { const on = x === t; x.setAttribute('aria-selected', on); $(x.getAttribute('aria-controls')).hidden = !on; });
+  try { localStorage.setItem(STORE + '-tab', t.id); } catch(e){}
+}));
+$('resetParams').addEventListener('click', () => { P = JSON.parse(JSON.stringify(P2026)); buildParams(); update(); save(); });
+let pend = null;
+function update(){ cancelAnimationFrame(pend); pend = requestAnimationFrame(() => { try { render(); } catch(e){ console.error(e); } }); }
+INPUT_IDS.forEach(id => { $(id).addEventListener('input', () => { update(); save(); }); $(id).addEventListener('change', () => { update(); save(); }); });
+$('form').addEventListener('submit', e => e.preventDefault());
+
+load(); buildParams(); render();
+try { const t = localStorage.getItem(STORE + '-tab'); if (t && $(t)) $(t).click(); } catch(e){}
+(async () => {
+  try { DL = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch(e){ DL = null; }
+})();
+$('btnPrint').addEventListener('click', () => { renderSheet(); window.print(); });
+</script>
+</body>
+</html>
